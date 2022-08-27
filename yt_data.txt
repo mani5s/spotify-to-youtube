@@ -1,0 +1,53 @@
+{   'etag': 'ZESY4VXXBV81i7QXbCFa7G72ZpE',
+    'items': [   {   'etag': 'JVVYiE4IWDR9GPSOOHgcBwLSZUo',
+                     'id': {'kind': 'youtube#video', 'videoId': 'SlPhMPnQ58k'},
+                     'kind': 'youtube#searchResult',
+                     'snippet': {   'channelId': 'UCN1hnUccO4FD5WfM7ithXaw',
+                                    'channelTitle': 'Maroon5VEVO',
+                                    'description': 'Memories” is out now: '
+                                                   'https://smarturl.it/MemoriesMaroon5 '
+                                                   'For more, visit: '
+                                                   'https://www.facebook.com/maroon5 '
+                                                   '...',
+                                    'liveBroadcastContent': 'none',
+                                    'publishTime': '2019-10-08T14:00:10Z',
+                                    'publishedAt': '2019-10-08T14:00:10Z',
+                                    'thumbnails': {   'default': {   'height': 90,
+                                                                     'url': 'https://i.ytimg.com/vi/SlPhMPnQ58k/default.jpg',
+                                                                     'width': 120},
+                                                      'high': {   'height': 360,
+                                                                  'url': 'https://i.ytimg.com/vi/SlPhMPnQ58k/hqdefault.jpg',
+                                                                  'width': 480},
+                                                      'medium': {   'height': 180,
+                                                                    'url': 'https://i.ytimg.com/vi/SlPhMPnQ58k/mqdefault.jpg',
+                                                                    'width': 320}},
+                                    'title': 'Maroon 5 - Memories (Official '
+                                             'Video)'}},
+                 {   'etag': '9dfPY4jOuqOqkCBTxrJx8PZ8lx0',
+                     'id': {'kind': 'youtube#video', 'videoId': 'o2DXt11SMNI'},
+                     'kind': 'youtube#searchResult',
+                     'snippet': {   'channelId': 'UCNqFDjYTexJDET3rPDrmJKg',
+                                    'channelTitle': '7clouds',
+                                    'description': 'Follow our Spotify '
+                                                   'playlists: '
+                                                   'http://bit.ly/7cloudsSpotify '
+                                                   'Maroon 5 - Memories '
+                                                   '(Lyrics) ⏬ Download / '
+                                                   'Stream: ...',
+                                    'liveBroadcastContent': 'none',
+                                    'publishTime': '2020-01-04T12:32:15Z',
+                                    'publishedAt': '2020-01-04T12:32:15Z',
+                                    'thumbnails': {   'default': {   'height': 90,
+                                                                     'url': 'https://i.ytimg.com/vi/o2DXt11SMNI/default.jpg',
+                                                                     'width': 120},
+                                                      'high': {   'height': 360,
+                                                                  'url': 'https://i.ytimg.com/vi/o2DXt11SMNI/hqdefault.jpg',
+                                                                  'width': 480},
+                                                      'medium': {   'height': 180,
+                                                                    'url': 'https://i.ytimg.com/vi/o2DXt11SMNI/mqdefault.jpg',
+                                                                    'width': 320}},
+                                    'title': 'Maroon 5 - Memories (Lyrics)'}}],
+    'kind': 'youtube#searchListResponse',
+    'nextPageToken': 'CAIQAA',
+    'pageInfo': {'resultsPerPage': 2, 'totalResults': 1000000},
+    'regionCode': 'SG'}
