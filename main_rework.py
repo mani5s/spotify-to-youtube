@@ -53,5 +53,3 @@ def make_playlist_db(playlist_name, YTID, SPID):
     db.commit()
     db.close()
     return _id
-
-make_playlist_db("Test2", "2YT", "SP2")
