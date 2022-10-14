@@ -29,7 +29,6 @@ class spotify_user:
         database.init_db(self.id)
         print("Initialised.")
 
-
     def refresh(self):
         r = requests.post("https://accounts.spotify.com/api/token",
                           data={"grant_type": "refresh_token",
@@ -41,7 +40,7 @@ class spotify_user:
         self.access_token = r.json()["access_token"]
 
     def check_token(self):
-        if time.time() >= self.token_expiry + 10:   #If token is expired or expires within 10 seconds, for network and processing delays.
+        if time.time() >= self.token_expiry + 10:  # If token is expired or expires within 10 seconds, for network and processing delays.
             self.refresh()
 
     def get_playlists(self):
