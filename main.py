@@ -1,83 +1,84 @@
-from sys import argv
-from time import sleep
-from spotify import all_playlists, specific_playlist, get_songs, query, get_playlist_name
-from yt_search import api_client, search_id
-from playlist_insert import make_playlist, add_songs, make_client
-import setup as s
-from os.path import exists
+import os
+import multiprocessing
+from subprocess import call
+from re import findall
+from webbrowser import open
+
+from spotify_auth import run
+import spotify
+import database
+
+q = multiprocessing.Queue()
+p = multiprocessing.Process(target=run, args=(q,))
+p.start()
+open("localhost:8888")
+code = q.get(block=True)
+p.terminate()
+
+user = spotify.spotify_user(code)
+playlists = user.get_playlists()
 
 
-
-def setup():
-    setup_status = s.setup()
-    if setup_status == False: pass 
-    if not exists("client_secrets.json"):
-        print("""You have not yet downloaded or renamed your youtube client secrets/
-        Please ensure you have downloaded renamed and moved into this folder before re-running this Program.""")
+def clear():
+    _ = call('clear' if os.name == 'posix' else 'cls')
 
 
-def main(spotify_client, spotify_playlist):
-    playlist_name, song_data = get_songs(spotify_client, spotify_playlist)
-    print(f"exporting songs from {playlist_name}")
-    sleep(0.4)
-    queries = query(song_data)
-    print(f"aquiring song id for songs in {playlist_name}")
-    yt_song_ids = search_id(queries)
-    youtube_client = make_client()
-    yt_playlist_id = make_playlist(playlist_name, youtube_client)
-    print(f"adding songs to {playlist_name}")
-    add = add_songs(youtube_client, yt_playlist_id, yt_song_ids)
-    print(f"Shout out. {playlist_name} should be complete. Please check")
-    sleep(0.6)
-    return add
+def print_playlists(playlists):
+    for p in playlists:
+        print(playlists.index(p), p["name"])
 
 
+print("\033[4mYour Playlists\033[0m")
+print_playlists(playlists)
 
 
-def main_all():
-    spotify_playlists, spotify_client = all_playlists()
-    count = 0
-    for spotify_playlist in spotify_playlists:
-        main(spotify_client, spotify_playlist)
-
-def main_specific():
-    knows = input("Do you know your playlist id? (yes/no)").lower()
-    if knows == "yes":
-        spotify_playlist = input("Enter your playlist id here: ")
-        spotify_client = specific_playlist()
-        print("Searching for playlist...",)
-        sleep(0.1)
-        correct = "no"
-        playlist_name = get_playlist_name(spotify_client, spotify_playlist)
-        if playlist_name == None: return 
-        correct = input(f"Is '{playlist_name}' the playlist you are looking for? (yes/no) ")
-        if correct.lower() == "yes": main(spotify_client, spotify_playlist)
-        if correct.lower() == "no": print("Playlist Not Found")
-
-
+def playlist_selection(playlists):
+    print("Which playlists to transfer? All(a) | Select playlists to include(i) | Select playlists to exclude(e): ")
+    s_type = input("Selection: ").lower()
+    if s_type == "a":
+        print("Selected all playlists")
+        return playlists
+    elif s_type == "i":
+        index = findall("\d", input("Enter index of playlist to include(comma or space seperated): "))
+        return [playlists[i] for i in index if 0 <= i < len(index)]
+    elif s_type == "e":
+        index = findall("\d", input("Enter index of playlist to exclude(comma or space seperated): "))
+        return [playlists[i] for i in range(len(playlists)) if i not in index]
     else:
-        user_playlist_name = input("Enter your playlist name: ")
-        spotify_playlists, spotify_client = all_playlists()
-        for spotify_playlist in spotify_playlists:
-            print("Searching for playlist...",)
-            sleep(0.1)
-            correct = "no"
-            playlist_name= get_playlist_name(spotify_client, spotify_playlist)
-            if playlist_name.lower() ==  user_playlist_name:
-                correct = input(f"Is {playlist_name} the playlist you are looking for? (yes/no) ")
-                if correct.lower() == "yes": break
-        if correct.lower() == "no": print("Playlist Not Found")
-    # main(spotify_client, spotify_playlist)
+        print("Invalid input")
+        playlist_selection()
 
 
-
-
-
-if __name__ == "__main__":
-    if not exists("setup_done.txt"):
-        setup()
+def edit_selection(p_selection, all_playlists):
+    clear()
+    i = input("Add(a) or Remove(r) playlists: ").lower()
+    if i == "a":
+        print_playlists([p for p in all_playlists if p not in p_selection])
+        index = findall("\d", input("Enter index of playlist to add(comma or space seperated): "))
+        return p_selection + [playlists[i] for i in index if 0 <= i < len(index)]
+    elif i == "r":
+        print_playlists(p_selection)
+        index = findall("\d", input("Enter index of playlist to remove(comma or space seperated): "))
+        return [p_selection[i] for i in range(len(p_selection)) if i not in index]
     else:
-        if len(argv) > 1 and argv[1] == "--a":
-            main_all()
-        else:
-            main_specific()
+        print("Invalid input")
+        edit_selection(p_selection, all_playlists)
+
+
+p_selection = playlist_selection(playlists)
+
+while 1:
+    clear()
+    print("\033[4mSelected Playlists\033[0m")
+    print_playlists(p_selection)
+    i = input("Confirm(c), Restart Selection(r) or Modify(m): ").lower()
+    if i == "c":
+        print("Confirmed playlists")
+        break
+    elif input == "m":
+        p_selection = edit_selection(p_selection, playlists)
+    else:  # if u entered an invalid option I'm just gonna restart bruh
+        p_selection = playlist_selection(playlists)
+
+for p in p_selection:
+    database.insert_spotify_playlist(user.id, p["id"], p["name"], p["description"])

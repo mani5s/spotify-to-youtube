@@ -1,5 +1,6 @@
 python-dotenv
-spotipy
 google-API-python-client
 google-auth
 Google-auth-OAuthlib
+flask
+waitress
