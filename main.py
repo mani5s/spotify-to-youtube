@@ -60,7 +60,6 @@ if __name__ == "__main__":
     open("http://localhost:8888")
     code = q.get(block=True)
     p.terminate()
-    print("Manish is dumb")
     user = spotify.spotify_user(code)
     playlists = user.get_playlists()
 
