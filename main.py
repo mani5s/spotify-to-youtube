@@ -8,15 +8,6 @@ from spotify_auth import run
 import spotify
 import database
 
-q = multiprocessing.Queue()
-p = multiprocessing.Process(target=run, args=(q,))
-p.start()
-open("localhost:8888")
-code = q.get(block=True)
-p.terminate()
-
-user = spotify.spotify_user(code)
-playlists = user.get_playlists()
 
 
 def clear():
@@ -26,10 +17,6 @@ def clear():
 def print_playlists(playlists):
     for p in playlists:
         print(playlists.index(p), p["name"])
-
-
-print("\033[4mYour Playlists\033[0m")
-print_playlists(playlists)
 
 
 def playlist_selection(playlists):
@@ -65,20 +52,36 @@ def edit_selection(p_selection, all_playlists):
         edit_selection(p_selection, all_playlists)
 
 
-p_selection = playlist_selection(playlists)
+if __name__ == "__main__":
 
-while 1:
-    clear()
-    print("\033[4mSelected Playlists\033[0m")
-    print_playlists(p_selection)
-    i = input("Confirm(c), Restart Selection(r) or Modify(m): ").lower()
-    if i == "c":
-        print("Confirmed playlists")
-        break
-    elif input == "m":
-        p_selection = edit_selection(p_selection, playlists)
-    else:  # if u entered an invalid option I'm just gonna restart bruh
-        p_selection = playlist_selection(playlists)
+    q = multiprocessing.Queue()
+    p = multiprocessing.Process(target=run, args=(q,))
+    p.start()
+    open("http://localhost:8888")
+    code = q.get(block=True)
+    p.terminate()
+    print("Manish is dumb")
+    user = spotify.spotify_user(code)
+    playlists = user.get_playlists()
 
-for p in p_selection:
-    database.insert_spotify_playlist(user.id, p["id"], p["name"], p["description"])
+    print("\033[4mYour Playlists\033[0m")
+    print_playlists(playlists)
+
+
+    p_selection = playlist_selection(playlists)
+
+    while 1:
+        clear()
+        print("\033[4mSelected Playlists\033[0m")
+        print_playlists(p_selection)
+        i = input("Confirm(c), Restart Selection(r) or Modify(m): ").lower()
+        if i == "c":
+            print("Confirmed playlists")
+            break
+        elif input == "m":
+            p_selection = edit_selection(p_selection, playlists)
+        else:  # if u entered an invalid option I'm just gonna restart bruh
+            p_selection = playlist_selection(playlists)
+
+    for p in p_selection:
+        database.insert_spotify_playlist(user.id, p["id"], p["name"], p["description"])
