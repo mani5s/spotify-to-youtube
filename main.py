@@ -1,6 +1,4 @@
-import os
 import multiprocessing
-from subprocess import call
 from re import split, fullmatch
 from webbrowser import open
 
