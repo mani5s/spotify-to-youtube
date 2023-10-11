@@ -4,7 +4,7 @@ from webbrowser import open
 from spotify_auth import run
 import spotify
 import database
-import youtube
+#import youtube
 
 
 def start_spotify_auth_process():
