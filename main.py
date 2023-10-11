@@ -1,120 +1,141 @@
-import os
 import multiprocessing
-from subprocess import call
-from re import split, fullmatch
+import re
 from webbrowser import open
-
 from spotify_auth import run
 import spotify
 import database
-
-q = multiprocessing.Queue()
-p = multiprocessing.Process(target=run, args=(q,))
-p.start()
-open("localhost:8888")
-code = q.get(block=True)
-p.terminate()
-
-user = spotify.spotify_user(code)
-db = database.database(user.id)
+import youtube
 
 
-def add_spotify_playlists():
-    playlists = user.get_playlists()
+def start_spotify_auth_process():
+    q = multiprocessing.Queue()
+    p = multiprocessing.Process(target=run, args=(q,))
+    p.start()
+    open("localhost:6969")
+    code = q.get(block=True)
+    p.terminate()
+    return code
 
-    def print_playlists(playlists):
-        for p in playlists:
-            print(playlists.index(p), p["name"])
 
+def get_playlist_indices(prompt):
+    return [int(i) for i in re.split("\s+|,|\n", input(prompt)) if re.fullmatch("\d+", i)]
+
+
+def print_playlists(playlists):
+    for index, playlist in enumerate(playlists):
+        print(index, playlist["name"])
+
+
+def playlist_selection(playlists):
     print("\033[4mYour Playlists\033[0m")
+    print_playlists(playlists)
 
-    def playlist_selection(playlists):
-        print_playlists(playlists)
-        print("Which playlists to transfer? All(a) | Select playlists to include(i) | Select playlists to exclude(e): ")
-        s_type = input("Selection: ").lower()
-        if s_type == "a":
-            print("Selected all playlists")
-            return playlists
-        elif s_type == "i":
-            index = [int(i) for i in
-                     split("\s+|,|\n", input("Enter index of playlist to include(comma or space seperated): ")) if
-                     fullmatch("\d+", i)]
-            return [playlists[i] for i in index if 0 <= i < len(playlists)]
-        elif s_type == "e":
-            index = [int(i) for i in
-                     split("\s+|,|\n", input("Enter index of playlist to exclude(comma or space seperated): ")) if
-                     fullmatch("\d+", i)]
-            return [playlists[i] for i in range(len(playlists)) if i not in index]
+    selection_type = input(
+        "Which playlists to transfer? All(a) | Select to include(i) | Select to exclude(e): ").lower()
+
+    if selection_type == "a":
+        return playlists
+
+    elif selection_type in ("i", "e"):
+        action = "include" if selection_type == "i" else "exclude"
+        indices = get_playlist_indices(f"Enter index of playlist to {action}(comma or space separated): ")
+
+        if selection_type == "i":
+            return [playlists[i] for i in indices if 0 <= i < len(playlists)]
         else:
-            print("Invalid input")
-            playlist_selection(playlists)
+            return [playlist for i, playlist in enumerate(playlists) if i not in indices]
 
-    def edit_selection(p_selection, all_playlists):
-        i = input("Add(a) or Remove(r) playlists: ").lower()
-        if i == "a":
-            add_playlists = [p for p in all_playlists if p not in p_selection]
-            print_playlists(add_playlists)
-            index = [int(i) for i in
-                     split("\s+|,|\n", input("Enter index of playlist to add(comma or space seperated): ")) if
-                     fullmatch("\d+", i)]
-            return p_selection + [add_playlists[i] for i in index if 0 <= i < len(add_playlists)]
-        elif i == "r":
-            print_playlists(p_selection)
-            index = [int(i) for i in
-                     split("\s+|,|\n", input("Enter index of playlist to remove(comma or space seperated): ")) if
-                     fullmatch("\d+", i)]
-            return [p_selection[i] for i in range(len(p_selection)) if i not in index]
-        else:
-            print("Invalid input")
-            edit_selection(p_selection, all_playlists)
+    else:
+        print("Invalid input")
+        return playlist_selection(playlists)
 
-    p_selection = playlist_selection(playlists)
 
-    while 1:
+def edit_selected_playlists(selected_playlists, all_playlists):
+    action = input("Add(a) or Remove(r) playlists: ").lower()
+
+    if action == "a":
+        available_playlists = [p for p in all_playlists if p not in selected_playlists]
+        print_playlists(available_playlists)
+        indices = get_playlist_indices("Enter index of playlist to add(comma or space separated): ")
+        return selected_playlists + [available_playlists[i] for i in indices if 0 <= i < len(available_playlists)]
+
+    elif action == "r":
+        print_playlists(selected_playlists)
+        indices = get_playlist_indices("Enter index of playlist to remove(comma or space separated): ")
+        return [playlist for i, playlist in enumerate(selected_playlists) if i not in indices]
+
+    else:
+        print("Invalid input")
+        return edit_selected_playlists(selected_playlists, all_playlists)
+
+
+def confirm_playlists_selection(selected_playlists, all_playlists):
+    while True:
         print("\033[4mSelected Playlists\033[0m")
-        print_playlists(p_selection)
-        i = input("Confirm(c), Restart Selection(r) or Modify(m): ").lower()
-        if i == "c":
+        print_playlists(selected_playlists)
+        option = input("Confirm(c), Restart Selection(r) or Modify(m): ").lower()
+
+        if option == "c":
             print("Confirmed playlists")
-            break
-        elif i == "m":
-            p_selection = edit_selection(p_selection, playlists)
-        else:  # if u entered an invalid option I'm just gonna restart bruh
-            p_selection = playlist_selection(playlists)
+            return selected_playlists
 
-    for p in p_selection:
-        p_id = db.insert_spotify_playlist(user.id, p["id"], p["name"], p["description"])
-        songs = user.get_playlist_songs(p["id"])
-        for s in songs:
-            song_id = db.insert_spotify_song(user.id, (s["track"]["id"], s["track"]["name"]))
-            album_id = db.insert_spotify_album(user.id, (
-                s["track"]["album"]["id"], s["track"]["album"]["name"], s["track"]["album"]["release_date"]))
-            artist_ids = db.insert_spotify_artists(user.id, [(a["id"], a["name"]) for a in s["track"]["artists"]])
-            db.insert_spotify_song_album(user.id, song_id, album_id)
-            db.insert_spotify_song_artist(user.id, song_id, artist_ids)
-        db.insert_spotify_playlist_songs(user.id, [(p_id, s["track"]["id"]) for s in songs])
+        elif option == "m":
+            selected_playlists = edit_selected_playlists(selected_playlists, all_playlists)
 
-    db.spotify_complete(user.id)
+        else:
+            selected_playlists = playlist_selection(all_playlists)
 
 
-def youtube_song_search():
+def add_spotify_playlists(user, db):
+    playlists = user.get_playlists()
+    confirmed_playlists = confirm_playlists_selection(playlist_selection(playlists), playlists)
+
+    for playlist in confirmed_playlists:
+        p_id = db.insert_spotify_playlist(playlist["id"], playlist["name"], playlist["description"])
+        songs = user.get_playlist_songs(playlist["id"])
+
+        for song in songs:
+            song_id = db.insert_spotify_song((song["track"]["id"], song["track"]["name"]))
+            album_id = db.insert_spotify_album(
+                (song["track"]["album"]["id"], song["track"]["album"]["name"], song["track"]["album"]["release_date"]))
+            artist_ids = db.insert_spotify_artists([(a["id"], a["name"]) for a in song["track"]["artists"]])
+            db.insert_spotify_song_album(song_id, album_id)
+            db.insert_spotify_song_artist(song_id, artist_ids)
+
+        db.insert_spotify_playlist_songs([(p_id, s["track"]["id"]) for s in songs])
+
+    db.spotify_complete()
+
+
+def youtube_song_search(db):
     print("Starting YT song search")
+    songs = db.list_spotify_songs()
+    yt_song_search = list(map(lambda song: (
+    song[0], youtube.search_song(f"{song[1]} {' '.join(a for a in db.get_spotify_song_artist(song[0]))}")), songs))
+    return yt_song_search
 
 
 def youtube_transfer():
     pass
 
 
-status = db.get_status()
-if status == 1:
-    add_spotify_playlists()
-elif status == 2:
-    print("Spotify done")
-    youtube_song_search()
-elif status == 3:
-    print("YT song search completed")
-    youtube_transfer()
-elif status == 4:
-    print("Started YT transfer")
-elif status == 5:
-    print("Transfer completed")
+def main():
+    code = start_spotify_auth_process()
+    user = spotify.spotify_user(code)
+    db = database.database(user.id)
+
+    status_actions = {
+        1: lambda: (add_spotify_playlists(user, db), youtube_song_search(db)),
+        2: lambda: print("Spotify done"),
+        3: lambda: print("YT song search completed"),
+        4: lambda: print("Started YT transfer"),
+        5: lambda: print("Transfer completed")
+    }
+
+    status = db.get_status()
+    if status in status_actions:
+        status_actions[status]()
+
+
+if __name__ == "__main__":
+    main()
