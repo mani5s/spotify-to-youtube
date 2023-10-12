@@ -1,10 +1,11 @@
 import multiprocessing
+import asyncio
 import re
 from webbrowser import open
 from spotify_auth import run
 import spotify
 import database
-#import youtube
+import youtube
 
 
 def start_spotify_auth_process():
@@ -86,23 +87,36 @@ def confirm_playlists_selection(selected_playlists, all_playlists):
             selected_playlists = playlist_selection(all_playlists)
 
 
-def add_spotify_playlists(user, db):
-    playlists = user.get_playlists()
+async def insert_songs_for_playlist(playlist, user, db):
+    await db.insert_spotify_playlists([(playlist["id"], playlist["name"], playlist["description"])])
+    p_id = playlist["id"]
+    songs = await user.get_playlist_songs(playlist["id"])
+
+    song_data = [(s["track"]["id"], s["track"]["name"]) for s in songs]
+    album_data = [(s["track"]["album"]["id"], s["track"]["album"]["name"], s["track"]["album"]["release_date"]) for s in
+                  songs]
+    artist_data = [(a["id"], a["name"]) for s in songs for a in s["track"]["artists"]]
+    song_artist_data = [(s["track"]["id"], a["id"]) for s in songs for a in s["track"]["artists"]]
+    song_album_data = [(s["track"]["id"], s["track"]["album"]["id"]) for s in songs]
+    playlist_song_data = [(p_id, s["track"]["id"]) for s in songs]
+
+    await db.insert_spotify_songs(song_data)
+    await db.insert_spotify_albums(album_data)
+    await db.insert_spotify_artists(artist_data)
+    await db.insert_spotify_song_artist(song_artist_data)
+    await db.insert_spotify_song_album(song_album_data)
+    await db.insert_spotify_playlist_songs(playlist_song_data)
+
+
+async def add_spotify_playlists(user, db):
+    playlists = await user.get_playlists()
     confirmed_playlists = confirm_playlists_selection(playlist_selection(playlists), playlists)
 
-    for playlist in confirmed_playlists:
-        p_id = db.insert_spotify_playlist(playlist["id"], playlist["name"], playlist["description"])
-        songs = user.get_playlist_songs(playlist["id"])
+    # Create a list of tasks to insert songs for each playlist
+    tasks = [insert_songs_for_playlist(playlist, user, db) for playlist in confirmed_playlists]
 
-        for song in songs:
-            song_id = db.insert_spotify_song((song["track"]["id"], song["track"]["name"]))
-            album_id = db.insert_spotify_album(
-                (song["track"]["album"]["id"], song["track"]["album"]["name"], song["track"]["album"]["release_date"]))
-            artist_ids = db.insert_spotify_artists([(a["id"], a["name"]) for a in song["track"]["artists"]])
-            db.insert_spotify_song_album(song_id, album_id)
-            db.insert_spotify_song_artist(song_id, artist_ids)
-
-        db.insert_spotify_playlist_songs([(p_id, s["track"]["id"]) for s in songs])
+    # Run tasks concurrently
+    await asyncio.gather(*tasks)
 
     db.spotify_complete()
 
@@ -111,7 +125,7 @@ def youtube_song_search(db):
     print("Starting YT song search")
     songs = db.list_spotify_songs()
     yt_song_search = list(map(lambda song: (
-    song[0], youtube.search_song(f"{song[1]} {' '.join(a for a in db.get_spotify_song_artist(song[0]))}")), songs))
+        song[0], youtube.search_song(f"{song[1]} {' '.join(a for a in db.get_spotify_song_artist(song[0]))}")), songs))
     return yt_song_search
 
 
@@ -119,22 +133,27 @@ def youtube_transfer():
     pass
 
 
+async def execute_status_action(status, user, db):
+    if status == 1:
+        await add_spotify_playlists(user, db)
+        youtube_song_search(db)
+    elif status == 2:
+        print("Spotify done")
+    elif status == 3:
+        print("YT song search completed")
+    elif status == 4:
+        print("Started YT transfer")
+    elif status == 5:
+        print("Transfer completed")
+
+
 def main():
     code = start_spotify_auth_process()
     user = spotify.spotify_user(code)
-    db = database.database(user.id)
-
-    status_actions = {
-        1: lambda: (add_spotify_playlists(user, db), youtube_song_search(db)),
-        2: lambda: print("Spotify done"),
-        3: lambda: print("YT song search completed"),
-        4: lambda: print("Started YT transfer"),
-        5: lambda: print("Transfer completed")
-    }
+    db = database.Database(user.id)
 
     status = db.get_status()
-    if status in status_actions:
-        status_actions[status]()
+    asyncio.run(execute_status_action(status, user, db))
 
 
 if __name__ == "__main__":
