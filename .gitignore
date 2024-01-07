@@ -3,3 +3,6 @@ test_data/
 .env
 *.db
 yt_client_secret.json
+.idea/
+__pycache__/
+test.py

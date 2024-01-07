@@ -27,7 +27,7 @@ def login():
     params = "response_type=code" \
              f"&client_id={os.getenv('client_id')}" \
              "&scope=playlist-read-private playlist-read-collaborative" \
-             "&redirect_uri=http%3A%2F%2Flocalhost%3A8888%2Fcallback" \
+             "&redirect_uri=http%3A%2F%2Flocalhost%3A6969%2Fcallback" \
              f"&state={state}"
     return redirect("https://accounts.spotify.com/en/authorize?" + params)
 
@@ -48,9 +48,7 @@ def callback():
         return render_template("error.html", error=error)
 
 
-def run(q:multiprocessing.Queue):
+def run(q: multiprocessing.Queue):
     global queue
     queue = q
-    serve(app, port=8888)
-
-
+    serve(app, port=6969)  # 8080 already being used, 8888 jupyter server
