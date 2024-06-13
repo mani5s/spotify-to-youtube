@@ -6,13 +6,14 @@ from spotify_auth import run
 import spotify
 import database
 import youtube
+import yt_search
 
 
 def start_spotify_auth_process():
     q = multiprocessing.Queue()
     p = multiprocessing.Process(target=run, args=(q,))
     p.start()
-    open("localhost:6969")
+    open("http://localhost:6969")
     code = q.get(block=True)
     p.terminate()
     return code
@@ -125,7 +126,7 @@ def youtube_song_search(db):
     print("Starting YT song search")
     songs = db.list_spotify_songs()
     yt_song_search = list(map(lambda song: (
-        song[0], youtube.search_song(f"{song[1]} {' '.join(a for a in db.get_spotify_song_artist(song[0]))}")), songs))
+        song[0], yt_search.search_song(f"{song[1]} {' '.join(a for a in db.get_spotify_song_artist(song[0]))}")), songs))
     return yt_song_search
 
 
@@ -136,9 +137,10 @@ def youtube_transfer():
 async def execute_status_action(status, user, db):
     if status == 1:
         await add_spotify_playlists(user, db)
-        youtube_song_search(db)
+        # youtube_song_search(db)
     elif status == 2:
         print("Spotify done")
+        # youtube_song_search(db)
     elif status == 3:
         print("YT song search completed")
     elif status == 4:

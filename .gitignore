@@ -6,3 +6,4 @@ yt_client_secret.json
 .idea/
 __pycache__/
 test.py
+client_secret.json

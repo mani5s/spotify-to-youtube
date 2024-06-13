@@ -57,6 +57,7 @@ class Database:
             c.execute("CREATE TABLE status "
                       "(id INTEGER PRIMARY KEY, status INTEGER NOT NULL);")
             c.execute("INSERT INTO status (id, status) VALUES (1, 1);")
+            # create tables for spotify data
             c.execute("CREATE TABLE spotify_playlists"
                       "(id INTEGER PRIMARY KEY AUTOINCREMENT, sp_playlist_id TEXT NOT NULL UNIQUE, "
                       "playlist_name TEXT NOT NULL, playlist_description TEXT);")
@@ -81,10 +82,12 @@ class Database:
                       "PRIMARY KEY (playlist_id, song_id),"
                       "FOREIGN KEY (playlist_id) REFERENCES spotify_playlists(id),"
                       "FOREIGN KEY (song_id) REFERENCES spotify_songs(id));")
+            # create tables for youtube
             c.execute("CREATE TABLE youtube_playlists"
-                      "(id INTEGER PRIMARY KEY AUTOINCREMENT, yt_playlist_id TEXT NOT NULL);")
+                      "(id INTEGER PRIMARY KEY AUTOINCREMENT, yt_playlist_id TEXT NOT NULL,"
+                      "playlist_name TEXT NOT NULL, playlist_description TEXT);")
             c.execute("CREATE TABLE youtube_songs"
-                      "(id INTEGER PRIMARY KEY AUTOINCREMENT, yt_song_id TEXT NOT NULL);")
+                      "(id INTEGER PRIMARY KEY AUTOINCREMENT, yt_song_id TEXT NOT NULL, song_name TEXT NOT NULL);")
             c.execute("CREATE TABLE youtube_playlist_songs"
                       "(playlist_id INTEGER NOT NULL, song_id INTEGER NOT NULL,"
                       "PRIMARY KEY (playlist_id, song_id),"
@@ -234,3 +237,37 @@ class Database:
         except sqlite3.Error as e:
             print(f"Error getting artist name: {e}")
             return ""
+        
+
+    async def insert_youtube_songs(self, songs: list) -> None:
+        data = [(s[0], s[1]) for s in songs]
+        with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+            self.batch_insert_with_ignore(conn, "yt_songs", ['yt_song_id', 'song_name'], data)
+
+    async def insert_youtube_playlist(self, playlist_info: str) -> None:
+        with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+            self.batch_insert_with_ignore(conn, "yt_playlists", ["yt_playlist_id", "playlist_name", "playlist_description"], playlist_info)
+
+    async def insert_youtube_playlist_songs(self, playlist_id: str, songs: list) -> None: 
+        data = [(playlist_id, song) for song in songs]
+        with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+            self.batch_insert_with_ignore(conn, "youtube_playlist_songs", ["playlist_id", "song_id"], data)
+
+        
+    async def insert_youtube_spotify_playlists(self, yt_id: str, sp_id: str) -> None:
+        with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+            self.batch_insert_with_ignore(conn, "youtube_spotify_playlists", ["spotify_id", "youtube_id", "done"], (sp_id, yt_id, 0))
+
+    async def update_youtube_spotify_playlist(self, yt_id: str, update: int) -> None:
+        try:
+            with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+                c = conn.cursor()
+                c.execute("UPDATE done=? WHERE yt_id=?", (update, yt_id))
+                conn.commit()
+
+        except sqlite3.error as e:
+            print(f"Error updating youtube_spotify_playlist {e}")
+
+    async def insert_youtube_spotify_songs(self, data: list):
+        with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+            self.batch_insert_with_ignore(conn, "youtube_spotify_songs", ["spotify_id", "youtube_id"], data)
