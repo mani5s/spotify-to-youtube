@@ -7,3 +7,9 @@ yt_client_secret.json
 __pycache__/
 test.py
 client_secret.json
+
+*.json
+*ipynb
+*.txt
+
+ven2/

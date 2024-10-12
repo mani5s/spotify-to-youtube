@@ -5,8 +5,8 @@ from webbrowser import open
 from spotify_auth import run
 import spotify
 import database
-import youtube
-import yt_search
+from ytmusicapi import YTMusic
+import time
 
 
 def start_spotify_auth_process():
@@ -122,12 +122,47 @@ async def add_spotify_playlists(user, db):
     db.spotify_complete()
 
 
-def youtube_song_search(db):
+async def youtube_song_search(db):
+    yt =YTMusic()
     print("Starting YT song search")
     songs = db.list_spotify_songs()
-    yt_song_search = list(map(lambda song: (
-        song[0], yt_search.search_song(f"{song[1]} {' '.join(a for a in db.get_spotify_song_artist(song[0]))}")), songs))
-    return yt_song_search
+    yt_songs = []
+    yt_spot = []
+
+    for song in songs:
+        result = yt.search(f"{song[1]} {' '.join(a for a in db.get_spotify_song_artist(song[0]))}", filter="songs")
+        yt_songs.append((result[0]["videoId"], song[1]))
+        yt_spot.append((song[2], result[0]["videoId"]))
+
+    tasks = [db.insert_youtube_spotify_songs(yt_spot), db.insert_youtube_songs(yt_songs)]
+
+    await asyncio.gather(*tasks)
+
+
+async def youtube_playlist_create(db):
+    yt = YTMusic("oauth.json")
+
+    playlists = db.list_spotify_playlists()
+    playlist_ids = list()
+    playlist_data = list()
+
+    for playlist in playlists:
+        try:
+            result = yt.create_playlist(title=playlist[1], description=playlist[2], privacy_status="UNLISTED")
+            playlist_ids.append((result, playlist[0], 0))
+            playlist_data.append((result, playlist[1], playlist[2]))
+
+        except Exception as e:
+            print("Error has occured, creating playlists will resume in a while.")
+            time.sleep(120)
+
+    tasks = [db.insert_youtube_spotify_playlists(playlist_ids), db.insert_youtube_playlists(playlist_data)]
+
+    await asyncio.gather(*tasks)
+
+async def update_db(db):
+    await db.update_youtube_songs()
+    
 
 
 def youtube_transfer():
@@ -140,7 +175,7 @@ async def execute_status_action(status, user, db):
         # youtube_song_search(db)
     elif status == 2:
         print("Spotify done")
-        # youtube_song_search(db)
+        await youtube_song_search(db)
     elif status == 3:
         print("YT song search completed")
     elif status == 4:
@@ -150,12 +185,15 @@ async def execute_status_action(status, user, db):
 
 
 def main():
-    code = start_spotify_auth_process()
-    user = spotify.spotify_user(code)
-    db = database.Database(user.id)
+    # code = start_spotify_auth_process()
+    # user = spotify.spotify_user(code)
+    # db = database.Database(user.id)
+    db = database.Database("wp07i46i1vp008d0bkpkc5z25")
+    asyncio.run(youtube_playlist_create(db))
 
-    status = db.get_status()
-    asyncio.run(execute_status_action(status, user, db))
+
+    # status = db.get_status()
+    # asyncio.run(execute_status_action(status, user, db))
 
 
 if __name__ == "__main__":

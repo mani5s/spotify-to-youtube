@@ -208,11 +208,22 @@ class Database:
         try:
             with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
                 c = conn.cursor()
-                c.execute("SELECT id, song_name FROM spotify_songs;")
+                c.execute("SELECT id, song_name, sp_song_id FROM spotify_songs;")
                 songs = c.fetchall()
                 return songs
         except sqlite3.Error as e:
             print(f"Error listing Spotify songs: {e}")
+            return []
+        
+    def list_spotify_playlists(self) -> list:
+        try:
+            with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+                c = conn.cursor()
+                c.execute("SELECT sp_playlist_id, playlist_name, playlist_description FROM spotify_playlists")
+                playlists = c.fetchall()
+                return playlists
+        except sqlite3.Error as e:
+            print(f"Error getting spotify playlists: {e}")
             return []
 
     def get_spotify_song_artist(self, song_id: int) -> list:
@@ -242,21 +253,20 @@ class Database:
     async def insert_youtube_songs(self, songs: list) -> None:
         data = [(s[0], s[1]) for s in songs]
         with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
-            self.batch_insert_with_ignore(conn, "yt_songs", ['yt_song_id', 'song_name'], data)
+            self.batch_insert_with_ignore(conn, "youtube_songs", ['yt_song_id', 'song_name'], data)
 
-    async def insert_youtube_playlist(self, playlist_info: str) -> None:
+    async def insert_youtube_playlists(self, playlist_info: list) -> None:
         with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
-            self.batch_insert_with_ignore(conn, "yt_playlists", ["yt_playlist_id", "playlist_name", "playlist_description"], playlist_info)
+            self.batch_insert_with_ignore(conn, "youtube_playlists", ["yt_playlist_id", "playlist_name", "playlist_description"], playlist_info)
 
     async def insert_youtube_playlist_songs(self, playlist_id: str, songs: list) -> None: 
         data = [(playlist_id, song) for song in songs]
         with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
             self.batch_insert_with_ignore(conn, "youtube_playlist_songs", ["playlist_id", "song_id"], data)
-
         
-    async def insert_youtube_spotify_playlists(self, yt_id: str, sp_id: str) -> None:
+    async def insert_youtube_spotify_playlists(self, data: list) -> None:
         with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
-            self.batch_insert_with_ignore(conn, "youtube_spotify_playlists", ["spotify_id", "youtube_id", "done"], (sp_id, yt_id, 0))
+            self.batch_insert_with_ignore(conn, "youtube_spotify_playlists", ["spotify_id", "youtube_id", "done"], data)
 
     async def update_youtube_spotify_playlist(self, yt_id: str, update: int) -> None:
         try:
@@ -271,3 +281,20 @@ class Database:
     async def insert_youtube_spotify_songs(self, data: list):
         with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
             self.batch_insert_with_ignore(conn, "youtube_spotify_songs", ["spotify_id", "youtube_id"], data)
+
+    async def update_youtube_songs(self):
+        with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+            c = conn.cursor()
+            c.execute("SELECT youtube_playlist_id, spotify_playlist_id FROM youtube_spotify_playlists")
+            playlists = {spotify_id: youtube_id for spotify_id, youtube_id in c.fetchall()}
+
+            c.execute("SELECT youtube_id, spotify_id FROM youtube_spotify_songs")
+            songs = {spotify_id: youtube_id for youtube_id, spotify_id in c.fetchall()}
+
+            c.execute("SELECT playlist_id, song_id FROM spotify_playlist_songs")
+            playlist_songs = list()
+            for playlist_id, song_id in c.fetchall():
+                playlist_songs.append(( playlists[playlist_id], songs[song_id]))
+
+            for song_id, playlist_ids in playlist_songs.items():
+                self.batch_insert_with_ignore(conn, "youtube_playlist_songs", ["playlist_id, song_id"], playlist_songs)
