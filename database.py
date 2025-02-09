@@ -68,20 +68,21 @@ class Database:
             c.execute("CREATE TABLE spotify_songs"
                       "(id INTEGER PRIMARY KEY AUTOINCREMENT, sp_song_id TEXT NOT NULL UNIQUE, song_name TEXT NOT NULL);")
             c.execute("CREATE TABLE spotify_song_album"
-                      "(song_id INTEGER NOT NULL, album_id INTEGER NOT NULL,"
+                      "(song_id TEXT NOT NULL, album_id TEXT NOT NULL,"
                       "PRIMARY KEY (song_id, album_id),"
                       "FOREIGN KEY (song_id) REFERENCES spotify_songs(id),"
                       "FOREIGN KEY (album_id) REFERENCES spotify_albums(id));")
             c.execute("CREATE TABLE spotify_song_artist"
-                      "(song_id INTEGER NOT NULL, artist_id INTEGER NOT NULL,"
+                      "(song_id TEXT NOT NULL, artist_id TEXT NOT NULL,"
                       "PRIMARY KEY (song_id, artist_id),"
                       "FOREIGN KEY (song_id) REFERENCES spotify_songs(id),"
                       "FOREIGN KEY (artist_id) REFERENCES spotify_artists(id));")
             c.execute("CREATE TABLE spotify_playlist_songs"
-                      "(playlist_id INTEGER NOT NULL, song_id INTEGER NOT NULL,"
+                      "(playlist_id TEXT NOT NULL, song_id TEXT NOT NULL,"
                       "PRIMARY KEY (playlist_id, song_id),"
                       "FOREIGN KEY (playlist_id) REFERENCES spotify_playlists(id),"
                       "FOREIGN KEY (song_id) REFERENCES spotify_songs(id));")
+            
             # create tables for youtube
             c.execute("CREATE TABLE youtube_playlists"
                       "(id INTEGER PRIMARY KEY AUTOINCREMENT, yt_playlist_id TEXT NOT NULL,"
@@ -298,3 +299,36 @@ class Database:
 
             for song_id, playlist_ids in playlist_songs.items():
                 self.batch_insert_with_ignore(conn, "youtube_playlist_songs", ["playlist_id, song_id"], playlist_songs)
+
+
+    def get_playlist_songs(self, playlist_id: str) -> list:
+
+        try:
+            with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+                c = conn.cursor()
+                
+                query = """
+                    SELECT s.id, s.song_name, s.sp_song_id 
+                    FROM spotify_songs s
+                    JOIN spotify_playlist_songs ps ON s.sp_song_id = ps.song_id
+                    JOIN spotify_playlists p ON ps.playlist_id = p.sp_playlist_id
+                    WHERE p.sp_playlist_id = ?
+                """
+                
+                c.execute(query, (playlist_id,))
+                songs = c.fetchall()
+                
+                # Convert the results to list of dictionaries
+                formatted_songs = []
+                for song in songs:
+                    formatted_songs.append({
+                        'id': song[0],         # internal ID
+                        'name': song[1],       # song_name
+                        'videoId': song[2]     # using sp_song_id as videoId to match expected format
+                    })
+                
+                return formatted_songs
+                
+        except sqlite3.Error as e:
+            print(f"Error getting playlist songs: {e}")
+            return []

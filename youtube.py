@@ -55,10 +55,6 @@ class YouTubeManager:
             if not sanitized_name:
                 logger.error("Invalid playlist name after sanitization")
                 return None
-            
-            sanitized_description = "TEST"
-            
-            print(f"\n{sanitized_name}\n{sanitized_description}\nUNLISTED")
 
             playlist_id = self.authenticated_yt.create_playlist(
                 title=sanitized_name,
@@ -86,6 +82,7 @@ class YouTubeManager:
         search_query = f"{song_name} {' '.join(artists)}"
         try:
             results = self.yt.search(search_query, filter="songs")
+            # return results
             if not results:
                 return None
 

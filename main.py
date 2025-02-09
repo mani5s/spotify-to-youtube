@@ -60,7 +60,7 @@ class PlaylistTransferManager:
         """Print playlists with indices"""
         print("\n\033[4mPlaylists\033[0m")
         for index, playlist in enumerate(playlists):
-            print(f"{index}: {playlist['name']}")
+            print(f"{index}: {playlist[1]}")
 
     def _select_playlists(self, playlists: List[Dict]) -> List[Dict]:
         """Handle playlist selection logic"""
@@ -115,6 +115,7 @@ class PlaylistTransferManager:
     ) -> List[Dict]:
         """Confirm the playlist selection with the user"""
         while True:
+            logger.info(f"selected: {selected}")
             print("\n\033[4mSelected Playlists\033[0m")
             self._print_playlists(selected)
             
@@ -186,17 +187,13 @@ class PlaylistTransferManager:
         """Process all selected Spotify playlists"""
         try:
             playlists = await self.spotify_user.get_playlists()
-            selected_playlists = self._confirm_playlist_selection(
-                self._select_playlists(playlists),
-                playlists
-            )
 
-            logger.info(f"Starting transfer of {len(selected_playlists)} playlists")
+            logger.info(f"Starting transfer of playlists")
             
             # Process playlists concurrently
             await asyncio.gather(*[
                 self._insert_songs_for_playlist(playlist)
-                for playlist in selected_playlists
+                for playlist in playlists
             ])
             
             self.database.spotify_complete()
@@ -207,9 +204,10 @@ class PlaylistTransferManager:
 
     async def process_youtube_transfer(self) -> None:
         """Handle the YouTube transfer process"""
+
         try:
             # First authenticate with YouTube Music
-            self.youtube_manager.authenticate()
+            self.youtube_manager.authenticate("browser.json")
             logger.info("YouTube Music authentication successful")
 
             # Get all playlists from database
@@ -217,9 +215,17 @@ class PlaylistTransferManager:
             if not playlists:
                 logger.error("No playlists found in database")
                 return
+            
+            selected_playlists = self._confirm_playlist_selection(
+                self._select_playlists(playlists),
+                playlists
+            )
 
             # Process each playlist
             for playlist_id, name, description in playlists:
+                if all(playlist_id not in playlist for playlist in selected_playlists): continue
+                # logger.info(f"creating {name}")
+                # return
                 try:
                     # Sanitize playlist name and description
                     sanitized_name = name.strip() if name else "Untitled Playlist"
@@ -283,10 +289,10 @@ async def main():
         transfer_manager = PlaylistTransferManager()
         
         # For testing with existing user ID:
-        # transfer_manager.initialize(user_id="existing_user_id")
+        transfer_manager.initialize(user_id="wp07i46i1vp008d0bkpkc5z25")
         
         # For new authentication:
-        transfer_manager.initialize()
+        # transfer_manager.initialize()
         
         await transfer_manager.execute_transfer()
         
