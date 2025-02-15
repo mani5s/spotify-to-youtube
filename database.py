@@ -261,7 +261,7 @@ class Database:
             self.batch_insert_with_ignore(conn, "youtube_playlists", ["yt_playlist_id", "playlist_name", "playlist_description"], playlist_info)
 
     async def insert_youtube_playlist_songs(self, playlist_id: str, songs: list) -> None: 
-        data = [(playlist_id, song) for song in songs]
+        data = [(playlist_id, song[0]) for song in songs]
         with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
             self.batch_insert_with_ignore(conn, "youtube_playlist_songs", ["playlist_id", "song_id"], data)
         
@@ -308,10 +308,11 @@ class Database:
                 c = conn.cursor()
                 
                 query = """
-                    SELECT s.id, s.song_name, s.sp_song_id 
+                    SELECT s.song_name, yss.youtube_id
                     FROM spotify_songs s
                     JOIN spotify_playlist_songs ps ON s.sp_song_id = ps.song_id
                     JOIN spotify_playlists p ON ps.playlist_id = p.sp_playlist_id
+                    LEFT JOIN youtube_spotify_songs yss ON s.sp_song_id = yss.spotify_id
                     WHERE p.sp_playlist_id = ?
                 """
                 
@@ -321,14 +322,41 @@ class Database:
                 # Convert the results to list of dictionaries
                 formatted_songs = []
                 for song in songs:
-                    formatted_songs.append({
-                        'id': song[0],         # internal ID
-                        'name': song[1],       # song_name
-                        'videoId': song[2]     # using sp_song_id as videoId to match expected format
-                    })
+                    formatted_songs.append((
+                        song[1],       # song_name
+                        song[0] 
+                    ))
                 
                 return formatted_songs
                 
         except sqlite3.Error as e:
             print(f"Error getting playlist songs: {e}")
             return []
+        
+
+    def get_song_data(self, playlist_id: str):
+        try:
+            with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+                c = conn.cursor()
+
+                query = """
+                        SELECT DISTINCT s.sp_song_id, s.song_name, GROUP_CONCAT(a.artist_name) as artists
+                        FROM spotify_songs s
+                        JOIN spotify_playlist_songs ps ON s.sp_song_id = ps.song_id
+                        JOIN spotify_playlists p ON ps.playlist_id = p.sp_playlist_id
+                        JOIN spotify_song_artist sa ON s.sp_song_id = sa.song_id
+                        JOIN spotify_artists a ON sa.artist_id = a.sp_artist_id
+                        LEFT JOIN youtube_spotify_songs yss ON s.id = yss.spotify_id
+                        WHERE p.sp_playlist_id = ? 
+                        AND yss.youtube_id IS NULL
+                        GROUP BY s.sp_song_id, s.song_name
+                        """
+                
+                c.execute(query, (playlist_id, ))
+                data = c.fetchall()
+                processed_results = [(song_id, song_name, artists.split(',')) for song_id, song_name, artists in data]
+                return processed_results
+            
+        except sqlite3.Error as e:
+            print(f"Error getting song data to search songs: {e}")
+            return None

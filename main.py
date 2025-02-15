@@ -244,6 +244,13 @@ class PlaylistTransferManager:
 
                     # Get songs for this playlist and add them
                     spotify_songs = self.database.get_playlist_songs(playlist_id)
+                    if any(t[0] is None for t in spotify_songs):
+                        song_deets = self.database.get_song_data(playlist_id=playlist_id)
+                        spotify_songs, yt_spot_mappings, failed_songs = await self.youtube_manager.batch_search_songs(song_deets)
+                        await self.database.insert_youtube_songs(spotify_songs)
+                        await self.database.insert_youtube_playlist_songs(playlist_id, spotify_songs)
+                        await self.database.insert_youtube_spotify_songs(yt_spot_mappings)
+                        
                     if spotify_songs:
                         logger.info(f"Adding {len(spotify_songs)} songs to playlist: {sanitized_name}")
                         # Add songs in batches
@@ -251,7 +258,7 @@ class PlaylistTransferManager:
                             batch = spotify_songs[i:i + self.youtube_manager.batch_size]
                             success = await self.youtube_manager.add_songs_to_playlist(
                                 yt_playlist_id, 
-                                [song['videoId'] for song in batch]
+                                [song[0] for song in batch]
                             )
                             if success:
                                 logger.info(f"Added batch {i//self.youtube_manager.batch_size + 1} to {sanitized_name}")
@@ -293,6 +300,9 @@ async def main():
         
         # For new authentication:
         # transfer_manager.initialize()
+        # with open("headers.txt", "r") as file:
+        #         headers = file.read()
+        # setup(filepath="browser.json", headers_raw=headers)
         
         await transfer_manager.execute_transfer()
         

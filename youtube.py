@@ -17,7 +17,7 @@ class YouTubeManager:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-    def authenticate(self, oauth_file: str = "oauth.json") -> None:
+    def authenticate(self, oauth_file: str = "browser.json") -> None:
         """Initialize authenticated YouTube Music instance"""
         try:
             self.authenticated_yt = YTMusic(oauth_file)
@@ -74,7 +74,32 @@ class YouTubeManager:
             logger.error(f"Failed to create playlist {name}: {e}")
             return None
 
-    async def search_song(self, song_name: str, artists: List[str], retry_count: int = 0) -> Optional[Dict]:
+    async def add_songs_to_playlist(self, playlist_id: str, song_ids: List[str], 
+                                  retry_count: int = 0) -> bool:
+        """Add songs to a playlist with retry logic"""
+        if not self.authenticated_yt or not playlist_id or not song_ids:
+            return False
+
+        try:
+            # Filter out any None or empty song IDs
+            valid_song_ids = [sid for sid in song_ids if sid]
+            if not valid_song_ids:
+                return False
+
+            self.authenticated_yt.add_playlist_items(playlist_id, valid_song_ids)
+            return True
+
+        except Exception as e:
+            if retry_count < self.max_retries:
+                logger.warning(f"Retrying adding songs to playlist {playlist_id} after error: {e}")
+                await asyncio.sleep(self.retry_delay * (retry_count + 1))
+                return await self.add_songs_to_playlist(playlist_id, song_ids, retry_count + 1)
+            
+            logger.error(f"Failed to add songs to playlist {playlist_id}: {e}")
+            return False
+
+
+    async def search_song(self, song_name: str, artists: List[str], retry_count: int = 0) -> Optional[str]:
         """Search for a song with retry logic and similarity checking"""
         if not song_name:
             return None
@@ -109,7 +134,7 @@ class YouTubeManager:
                     best_match = result
 
             if highest_similarity > 0.7:  # Threshold for accepting a match
-                return best_match
+                return best_match["videoId"]
             return None
 
         except Exception as e:
@@ -121,31 +146,7 @@ class YouTubeManager:
             logger.error(f"Failed to search for {search_query}: {e}")
             return None
 
-    async def add_songs_to_playlist(self, playlist_id: str, song_ids: List[str], 
-                                  retry_count: int = 0) -> bool:
-        """Add songs to a playlist with retry logic"""
-        if not self.authenticated_yt or not playlist_id or not song_ids:
-            return False
-
-        try:
-            # Filter out any None or empty song IDs
-            valid_song_ids = [sid for sid in song_ids if sid]
-            if not valid_song_ids:
-                return False
-
-            self.authenticated_yt.add_playlist_items(playlist_id, valid_song_ids)
-            return True
-
-        except Exception as e:
-            if retry_count < self.max_retries:
-                logger.warning(f"Retrying adding songs to playlist {playlist_id} after error: {e}")
-                await asyncio.sleep(self.retry_delay * (retry_count + 1))
-                return await self.add_songs_to_playlist(playlist_id, song_ids, retry_count + 1)
-            
-            logger.error(f"Failed to add songs to playlist {playlist_id}: {e}")
-            return False
-
-    async def batch_search_songs(self, songs: List[Tuple]) -> Tuple[List, List, List]:
+    async def batch_search_songs(self, songs: List[Tuple]) -> Tuple[str, str, List]:
         """Process songs in batches with rate limiting"""
         yt_songs = []
         yt_spot_mappings = []
@@ -156,12 +157,11 @@ class YouTubeManager:
             logger.info(f"Processing batch {i//self.batch_size + 1}/{len(songs)//self.batch_size + 1}")
             
             for song in batch:
-                artists = self.db.get_spotify_song_artist(song[0])
-                result = await self.search_song(song[1], artists)
+                result = await self.search_song(song[1], song[2])
                 
                 if result:
-                    yt_songs.append((result['videoId'], song[1]))
-                    yt_spot_mappings.append((song[2], result['videoId']))
+                    yt_songs.append((result, song[1]))
+                    yt_spot_mappings.append((song[0], result))
                 else:
                     failed_songs.append(song)
                 
