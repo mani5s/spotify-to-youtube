@@ -78,10 +78,10 @@ class Database:
                       "FOREIGN KEY (song_id) REFERENCES spotify_songs(id),"
                       "FOREIGN KEY (artist_id) REFERENCES spotify_artists(id));")
             c.execute("CREATE TABLE spotify_playlist_songs"
-                      "(playlist_id TEXT NOT NULL, song_id TEXT NOT NULL,"
-                      "PRIMARY KEY (playlist_id, song_id),"
+                      "(id INTEGER PRIMARY KEY AUTOINCREMENT, playlist_id TEXT NOT NULL, song_id TEXT NOT NULL, sequence INTEGER,"
                       "FOREIGN KEY (playlist_id) REFERENCES spotify_playlists(id),"
-                      "FOREIGN KEY (song_id) REFERENCES spotify_songs(id));")
+                      "FOREIGN KEY (song_id) REFERENCES spotify_songs(id)"
+                      "UNIQUE(playlist_id, song_id, sequence));")
             
             # create tables for youtube
             c.execute("CREATE TABLE youtube_playlists"
@@ -147,9 +147,36 @@ class Database:
         with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
             self.batch_insert_with_ignore(conn, "spotify_song_album", ['song_id', 'album_id'], song_album_data)
 
+    
     async def insert_spotify_playlist_songs(self, playlist_songs: list) -> None:
-        with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
-            self.batch_insert_with_ignore(conn, "spotify_playlist_songs", ['playlist_id', 'song_id'], playlist_songs)
+        """
+        Insert playlist songs with sequence numbers.
+        playlist_songs should be a list of tuples: (playlist_id, song_id)
+        """
+        try:
+            with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
+                c = conn.cursor()
+                
+                # Group by playlist_id and assign sequence
+                playlist_data = {}
+                for playlist_id, song_id in playlist_songs:
+                    if playlist_id not in playlist_data:
+                        playlist_data[playlist_id] = []
+                    playlist_data[playlist_id].append(song_id)
+                
+                # Prepare data for insertion with sequence numbers
+                insertion_data = []
+                for playlist_id, songs in playlist_data.items():
+                    for i, song_id in enumerate(songs):
+                        insertion_data.append((playlist_id, song_id, i))
+                
+                c.executemany(
+                    "INSERT OR IGNORE INTO spotify_playlist_songs (playlist_id, song_id, sequence) VALUES (?, ?, ?)",
+                    insertion_data
+                )
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"Error inserting playlist songs: {e}")
 
     def get_existing_song_id(self, song: tuple) -> int:
         try:
@@ -301,8 +328,7 @@ class Database:
                 self.batch_insert_with_ignore(conn, "youtube_playlist_songs", ["playlist_id, song_id"], playlist_songs)
 
 
-    def get_playlist_songs(self, playlist_id: str) -> list:
-
+    async def get_playlist_songs(self, playlist_id: str) -> list:
         try:
             with SQLiteConnectionPool(f"{self.db_id}.db") as conn:
                 c = conn.cursor()
@@ -314,20 +340,24 @@ class Database:
                     JOIN spotify_playlists p ON ps.playlist_id = p.sp_playlist_id
                     LEFT JOIN youtube_spotify_songs yss ON s.sp_song_id = yss.spotify_id
                     WHERE p.sp_playlist_id = ?
+                    ORDER BY ps.sequence ASC, ps.id ASC
                 """
                 
                 c.execute(query, (playlist_id,))
                 songs = c.fetchall()
                 
-                # Convert the results to list of dictionaries
                 formatted_songs = []
                 for song in songs:
                     formatted_songs.append((
-                        song[1],       # song_name
-                        song[0] 
+                        song[1],  # youtube_id
+                        song[0]   # song_name
                     ))
                 
                 return formatted_songs
+                
+        except sqlite3.Error as e:
+            print(f"Error getting playlist songs: {e}")
+            return []
                 
         except sqlite3.Error as e:
             print(f"Error getting playlist songs: {e}")
@@ -346,7 +376,7 @@ class Database:
                         JOIN spotify_playlists p ON ps.playlist_id = p.sp_playlist_id
                         JOIN spotify_song_artist sa ON s.sp_song_id = sa.song_id
                         JOIN spotify_artists a ON sa.artist_id = a.sp_artist_id
-                        LEFT JOIN youtube_spotify_songs yss ON s.id = yss.spotify_id
+                        LEFT JOIN youtube_spotify_songs yss ON s.sp_song_id = yss.spotify_id
                         WHERE p.sp_playlist_id = ? 
                         AND yss.youtube_id IS NULL
                         GROUP BY s.sp_song_id, s.song_name

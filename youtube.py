@@ -1,7 +1,8 @@
 import asyncio
 from typing import List, Tuple, Dict, Optional
-from ytmusicapi import YTMusic
+from ytmusicapi import YTMusic, setup
 from difflib import SequenceMatcher
+from youtube_auth import capture_headers
 import logging
 import re
 
@@ -9,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class YouTubeManager:
-    def __init__(self, db, batch_size: int = 50, max_retries: int = 3, retry_delay: int = 5):
+    def __init__(self, db, batch_size: int = 5, max_retries: int = 3, retry_delay: int = 5):
         self.db = db
         self.yt = YTMusic()
         self.authenticated_yt = None
@@ -25,6 +26,13 @@ class YouTubeManager:
         except Exception as e:
             logger.error(f"Failed to authenticate with YouTube Music: {e}")
             raise
+
+
+    async def setup(self):
+         await capture_headers()
+         with open("headers.txt", "r") as file:
+            headers = file.read()
+            setup(filepath="browser.json", headers_raw=headers)
 
     @staticmethod
     def sanitize_text(text: str, max_length: int = 150) -> str:
@@ -83,10 +91,11 @@ class YouTubeManager:
         try:
             # Filter out any None or empty song IDs
             valid_song_ids = [sid for sid in song_ids if sid]
+            logging.info(valid_song_ids)
             if not valid_song_ids:
                 return False
 
-            self.authenticated_yt.add_playlist_items(playlist_id, valid_song_ids)
+            self.authenticated_yt.add_playlist_items(playlist_id, valid_song_ids, duplicates=True)
             return True
 
         except Exception as e:
@@ -101,6 +110,7 @@ class YouTubeManager:
 
     async def search_song(self, song_name: str, artists: List[str], retry_count: int = 0) -> Optional[str]:
         """Search for a song with retry logic and similarity checking"""
+        logger.info(f"Searching for {song_name}")
         if not song_name:
             return None
 
@@ -114,6 +124,7 @@ class YouTubeManager:
             # Check similarity of song name and artist
             best_match = None
             highest_similarity = 0
+            # logging.info(f"results are {results}")
 
             for result in results[:3]:  # Check top 3 results
                 name_similarity = SequenceMatcher(None, song_name.lower(), 
@@ -133,8 +144,9 @@ class YouTubeManager:
                     highest_similarity = combined_similarity
                     best_match = result
 
-            if highest_similarity > 0.7:  # Threshold for accepting a match
+            if highest_similarity > 0.6:  # Threshold for accepting a match
                 return best_match["videoId"]
+            
             return None
 
         except Exception as e:
